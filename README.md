@@ -6,20 +6,7 @@ This project aims to predict the probability of a customer purchasing specific p
 bash
 Copy
 Edit
-📁 Customer-Purchase-Prediction  
-│── 📜 README.md                  # Project documentation  
-│── 📜 requirements.txt            # Required dependencies  
-│── 📜 train_model.py              # Model training script  
-│── 📜 predict.py                  # Generate predictions for customers  
-│── 📜 app.py                       # API for real-time recommendations  
-│── 📂 data/  
-│    ├── customers_info.json       # Customer details  
-│    ├── customer_transaction_info.json  # Order history  
-│    ├── product_info.json         # Product catalog  
-│    ├── orders_returned_info.json # Returned orders  
-│    ├── region_seller_info.json   # Regional data  
-│── 📂 models/  
-│    ├── trained_model.pkl         # Saved trained model  
+
 🛠️ Installation & Setup
 1️⃣ Clone the Repository:
 
