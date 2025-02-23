@@ -6,8 +6,8 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Load your trained model
-with open("xgboost_model.pkl", "rb") as model_file:
-    model = pickle.load(model_file)
+with open() as model_file:
+    model = pickle.load("xgboost_model.pkl", "rb")
 
 # Secure API key
 API_KEY = "58f8aa7261e0bcfb1ab85c9b5e124a7bab8a0cc80fca9aeb8d148fcbb0f2ca55"
