@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import aiImage from '../assets/aiml_logo.jpg';
+import React, { useState, useEffect } from 'react';
 import { 
   Printer, 
   CheckCircle, 
@@ -22,10 +21,10 @@ const PredictionForm = () => {
     return_rate: 0.1,
     average_order_value: 50.0,
     product_diversity: 5,
-    region: 2,
-    high_value_customer: 1
+    region: '1',
+    high_value_customer: '0'
   });
-  
+
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -33,8 +32,38 @@ const PredictionForm = () => {
   const [activeTab, setActiveTab] = useState('form');
   const [showTooltip, setShowTooltip] = useState(null);
 
+  // Calculate average order value whenever total_orders or total_spent changes
+  useEffect(() => {
+    if (formData.total_orders > 0) {
+      const avgOrderValue = formData.total_spent / formData.total_orders;
+      setFormData(prev => ({
+        ...prev,
+        average_order_value: Math.round(avgOrderValue * 100) / 100
+      }));
+    }
+  }, [formData.total_orders, formData.total_spent]);
+
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: parseFloat(e.target.value) || 0 });
+    let value = e.target.value;
+    const name = e.target.name;
+
+    // Convert to number for numeric fields
+    if (e.target.type === 'number') {
+      value = value === '' ? '' : Math.max(0, parseInt(value, 10));
+    }
+
+    // Special handling for return rate (0-1)
+    if (name === 'return_rate') {
+      value = Math.min(1, Math.max(0, parseFloat(value) || 0));
+      value = Math.round(value * 100) / 100; // Round to 2 decimal places
+    }
+
+    // Ensure product diversity doesn't exceed total orders
+    if (name === 'product_diversity') {
+      value = Math.min(value, formData.total_orders);
+    }
+
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
@@ -49,7 +78,11 @@ const PredictionForm = () => {
           'Content-Type': 'application/json',
           'x-api-key': '58f8aa7261e0bcfb1ab85c9b5e124a7bab8a0cc80fca9aeb8d148fcbb0f2ca55'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          high_value_customer: parseInt(formData.high_value_customer),
+          region: parseInt(formData.region)
+        })
       });
       
       const data = await response.json();
@@ -70,10 +103,22 @@ const PredictionForm = () => {
       return_rate: 0,
       average_order_value: 0,
       product_diversity: 0,
-      region: 0,
-      high_value_customer: 0
+      region: '0',
+      high_value_customer: '0'
     });
     setResult(null);
+  };
+
+  const regions = [
+    { value: '0', label: 'South Region' },
+    { value: '1', label: 'Central Region' },
+    { value: '2', label: 'West Region' },
+    { value: '3', label: 'East Region' }
+  ];
+
+  const getRegionLabel = (value) => {
+    const region = regions.find(r => r.value === value);
+    return region ? region.label : 'Unknown Region';
   };
 
   const formFields = [
@@ -81,60 +126,54 @@ const PredictionForm = () => {
       name: 'total_orders', 
       label: 'Total Orders', 
       type: 'number',
-      tooltip: 'Total number of orders placed by the customer',
+      min: 0,
+      tooltip: 'Total number of orders placed by the customer (whole number)',
       icon: Package
     },
     { 
       name: 'total_spent', 
       label: 'Total Spent ($)', 
-      type: 'number', 
-      step: '0.01',
-      tooltip: 'Total amount spent by the customer in USD',
+      type: 'number',
+      min: 0,
+      tooltip: 'Total amount spent by the customer in USD (whole number)',
       icon: DollarSign
     },
     { 
       name: 'printer_purchases_last_6m', 
       label: 'Recent Printer Purchases', 
       type: 'number',
-      tooltip: 'Number of printers purchased in the last 6 months',
+      min: 0,
+      tooltip: 'Number of printers purchased in the last 6 months (whole number)',
       icon: Printer
     },
     { 
       name: 'return_rate', 
       label: 'Return Rate', 
-      type: 'number', 
+      type: 'number',
+      min: 0,
+      max: 1,
       step: '0.01',
-      tooltip: 'Percentage of items returned (0-1)',
-      icon: RefreshCw
+      tooltip: 'Percentage of items returned (between 0 and 1, e.g., 0.5 = 50%)',
+      icon: RefreshCw,
+      className: formData.return_rate > 1 || formData.return_rate < 0 
+        ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+        : ''
     },
     { 
       name: 'average_order_value', 
       label: 'Average Order Value ($)', 
-      type: 'number', 
-      step: '0.01',
-      tooltip: 'Average value of orders in USD',
+      type: 'number',
+      disabled: true,
+      tooltip: 'Auto-calculated: Total Spent / Total Orders',
       icon: TrendingUp
     },
     { 
       name: 'product_diversity', 
       label: 'Product Diversity', 
       type: 'number',
-      tooltip: 'Number of different product categories purchased',
+      min: 0,
+      tooltip: 'Number of different product categories purchased (cannot exceed total orders)',
       icon: Package
-    },
-    { 
-      name: 'region', 
-      label: 'Region', 
-      type: 'number',
-      tooltip: 'Customer region code (1-5)',
-      icon: Users
-    },
-    { 
-      name: 'high_value_customer', 
-      label: 'High Value Customer', 
-      type: 'number',
-      tooltip: 'High value customer flag (0 or 1)',
-      icon: Users
     }
   ];
 
@@ -153,11 +192,6 @@ const PredictionForm = () => {
                   Advanced machine learning model for predicting customer purchase behavior
                 </p>
               </div>
-              <div className="hidden md:block">
-               <img src={aiImage} alt="AI" className="w-20 h-20 rounded-lg shadow-lg" />
-              </div>
-
-
             </div>
           </div>
 
@@ -206,7 +240,7 @@ const PredictionForm = () => {
                       <div key={field.name} className="relative group">
                         <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg -m-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                         <div className="relative space-y-2">
-                          <label className=" text-sm font-medium text-gray-700 flex items-center gap-2">
+                          <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                             <field.icon className="h-4 w-4 text-indigo-500" />
                             {field.label}
                             <div className="relative">
@@ -222,17 +256,93 @@ const PredictionForm = () => {
                               )}
                             </div>
                           </label>
-                          <input
-                            type={field.type}
-                            name={field.name}
-                            step={field.step}
-                            value={formData[field.name]}
-                            onChange={handleChange}
-                            className="block w-full rounded-lg border border-gray-300 px-4 py-3 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm transition duration-200 ease-in-out hover:border-gray-400"
-                          />
+                          <div className="relative">
+                            <input
+                              type={field.type}
+                              name={field.name}
+                              min={field.min}
+                              max={field.max}
+                              step={field.step}
+                              disabled={field.disabled}
+                              value={formData[field.name]}
+                              onChange={handleChange}
+                              className={`block w-full rounded-lg border border-gray-300 px-4 py-3 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm transition duration-200 ease-in-out hover:border-gray-400 disabled:bg-gray-50 disabled:text-gray-500 ${field.className || ''}`}
+                            />
+                            {field.name === 'return_rate' && (
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
+                                {(formData.return_rate * 100).toFixed(0)}%
+                              </div>
+                            )}
+                          </div>
+                          {field.name === 'return_rate' && (
+                            <input
+                              type="range"
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              value={formData.return_rate}
+                              onChange={(e) => handleChange({ target: { name: 'return_rate', value: e.target.value } })}
+                              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                            />
+                          )}
                         </div>
                       </div>
                     ))}
+
+                    {/* Region Dropdown */}
+                    <div className="relative group">
+                      <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg -m-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                      <div className="relative space-y-2">
+                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                          <Users className="h-4 w-4 text-indigo-500" />
+                          Region
+                          <div className="relative">
+                            <Info
+                              className="h-4 w-4 text-gray-400 cursor-help"
+                              onMouseEnter={() => setShowTooltip('region')}
+                              onMouseLeave={() => setShowTooltip(null)}
+                            />
+                            {showTooltip === 'region' && (
+                              <div className="absolute z-10 w-48 px-3 py-2 -mt-1 text-sm text-white bg-gray-900 rounded-lg shadow-lg">
+                                Select the geographical region of the customer
+                              </div>
+                            )}
+                          </div>
+                        </label>
+                        <select
+                          name="region"
+                          value={formData.region}
+                          onChange={handleChange}
+                          className="block w-full rounded-lg border border-gray-300 px-4 py-3 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm transition duration-200 ease-in-out hover:border-gray-400"
+                        >
+                          {regions.map(region => (
+                            <option key={region.value} value={region.value}>
+                              {region.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* High Value Customer Toggle */}
+                    <div className="relative group">
+                      <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg -m-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                      <div className="relative space-y-2">
+                        <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                          <Users className="h-4 w-4 text-indigo-500" />
+                          High Value Customer
+                        </label>
+                        <select
+                          name="high_value_customer"
+                          value={formData.high_value_customer}
+                          onChange={handleChange}
+                          className="block w-full rounded-lg border border-gray-300 px-4 py-3 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm transition duration-200 ease-in-out hover:border-gray-400"
+                        >
+                          <option value="0">No</option>
+                          <option value="1">Yes</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex justify-center gap-4">
@@ -327,7 +437,7 @@ const PredictionForm = () => {
                           </div>
                           <div>
                             <span className="block text-gray-500">Region</span>
-                            <span className="font-medium">{entry.region}</span>
+                            <span className="font-medium">{getRegionLabel(entry.region)}</span>
                           </div>
                         </div>
                       </div>
