@@ -10,13 +10,10 @@ import {
   TrendingUp,
   Users,
   DollarSign,
-  Package,
-  ArrowUpRight,
-  ArrowDownRight,
-  Minus
+  Package
 } from 'lucide-react';
 
-const PredictionFormPrinter = () => {
+const PredictionForm = () => {
   const [formData, setFormData] = useState({
     total_orders: 10,
     total_spent: 500.0,
@@ -34,8 +31,8 @@ const PredictionFormPrinter = () => {
   const [history, setHistory] = useState([]);
   const [activeTab, setActiveTab] = useState('form');
   const [showTooltip, setShowTooltip] = useState(null);
-  const [parameterImpact, setParameterImpact] = useState({});
 
+  // Calculate average order value whenever total_orders or total_spent changes
   useEffect(() => {
     if (formData.total_orders > 0) {
       const avgOrderValue = formData.total_spent / formData.total_orders;
@@ -46,73 +43,22 @@ const PredictionFormPrinter = () => {
     }
   }, [formData.total_orders, formData.total_spent]);
 
-  const calculateParameterImpact = (data) => {
-    // Baseline values for comparison
-    const baselines = {
-      total_orders: 5,
-      total_spent: 250,
-      printer_purchases_last_6m: 0,
-      return_rate: 0.05,
-      average_order_value: 50,
-      product_diversity: 2,
-      region: '1',
-      high_value_customer: '0'
-    };
-
-    // Weight assignments for each parameter
-    const weights = {
-      total_orders: 0.15,
-      total_spent: 0.2,
-      printer_purchases_last_6m: 0.25,
-      return_rate: -0.15,
-      average_order_value: 0.1,
-      product_diversity: 0.1,
-      region: 0.025,
-      high_value_customer: 0.025
-    };
-
-    let impacts = {};
-    
-    // Calculate impact for each parameter
-    Object.keys(weights).forEach(param => {
-      let impact = 0;
-      
-      if (param === 'return_rate') {
-        // Lower return rate is better
-        impact = (baselines[param] - data[param]) * weights[param];
-      } else if (param === 'region' || param === 'high_value_customer') {
-        // Categorical variables
-        impact = data[param] === baselines[param] ? 0 : weights[param];
-      } else {
-        // Higher values are generally better for other parameters
-        impact = (data[param] - baselines[param]) * weights[param];
-      }
-      
-      impacts[param] = {
-        value: impact,
-        direction: impact > 0 ? 'positive' : impact < 0 ? 'negative' : 'neutral',
-        weight: weights[param],
-        baseline: baselines[param],
-        difference: data[param] - baselines[param]
-      };
-    });
-
-    return impacts;
-  };
-
   const handleChange = (e) => {
     let value = e.target.value;
     const name = e.target.name;
 
+    // Convert to number for numeric fields
     if (e.target.type === 'number') {
-      value = value === '' ? '' : Math.max(0, parseFloat(value));
+      value = value === '' ? '' : Math.max(0, parseInt(value, 10));
     }
 
+    // Special handling for return rate (0-1)
     if (name === 'return_rate') {
       value = Math.min(1, Math.max(0, parseFloat(value) || 0));
-      value = Math.round(value * 100) / 100;
+      value = Math.round(value * 100) / 100; // Round to 2 decimal places
     }
 
+    // Ensure product diversity doesn't exceed total orders
     if (name === 'product_diversity') {
       value = Math.min(value, formData.total_orders);
     }
@@ -138,19 +84,10 @@ const PredictionFormPrinter = () => {
           region: parseInt(formData.region)
         })
       });
-    
       
       const data = await response.json();
-      const impacts = calculateParameterImpact(formData);
-      
       setResult(data);
-      setParameterImpact(impacts);
-      setHistory([...history, { 
-        ...formData, 
-        result: data, 
-        timestamp: new Date(),
-        impacts 
-      }]);
+      setHistory([...history, { ...formData, result: data, timestamp: new Date() }]);
     } catch (err) {
       setError('Failed to get prediction. Please try again.');
     } finally {
@@ -190,7 +127,7 @@ const PredictionFormPrinter = () => {
       label: 'Total Orders', 
       type: 'number',
       min: 0,
-      tooltip: 'Total number of orders placed by the customer',
+      tooltip: 'Total number of orders placed by the customer (whole number)',
       icon: Package
     },
     { 
@@ -198,7 +135,7 @@ const PredictionFormPrinter = () => {
       label: 'Total Spent ($)', 
       type: 'number',
       min: 0,
-      tooltip: 'Total amount spent by the customer in USD',
+      tooltip: 'Total amount spent by the customer in USD (whole number)',
       icon: DollarSign
     },
     { 
@@ -206,7 +143,7 @@ const PredictionFormPrinter = () => {
       label: 'Recent Printer Purchases', 
       type: 'number',
       min: 0,
-      tooltip: 'Number of printers purchased in the last 6 months',
+      tooltip: 'Number of printers purchased in the last 6 months (whole number)',
       icon: Printer
     },
     { 
@@ -216,8 +153,11 @@ const PredictionFormPrinter = () => {
       min: 0,
       max: 1,
       step: '0.01',
-      tooltip: 'Percentage of items returned (between 0 and 1)',
-      icon: RefreshCw
+      tooltip: 'Percentage of items returned (between 0 and 1, e.g., 0.5 = 50%)',
+      icon: RefreshCw,
+      className: formData.return_rate > 1 || formData.return_rate < 0 
+        ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+        : ''
     },
     { 
       name: 'average_order_value', 
@@ -232,46 +172,10 @@ const PredictionFormPrinter = () => {
       label: 'Product Diversity', 
       type: 'number',
       min: 0,
-      tooltip: 'Number of different product categories purchased',
+      tooltip: 'Number of different product categories purchased (cannot exceed total orders)',
       icon: Package
     }
   ];
-
-  const renderImpactIcon = (direction) => {
-    if (direction === 'positive') {
-      return <ArrowUpRight className="h-4 w-4 text-green-500" />;
-    } else if (direction === 'negative') {
-      return <ArrowDownRight className="h-4 w-4 text-red-500" />;
-    }
-    return <Minus className="h-4 w-4 text-gray-500" />;
-  };
-
-  const getImpactColor = (value) => {
-    if (value > 0.1) return 'text-green-600';
-    if (value < -0.1) return 'text-red-600';
-    return 'text-gray-600';
-  };
-
-  const getImpactDescription = (impact) => {
-    const { value, weight, baseline, difference } = impact;
-    let description = '';
-
-    if (Math.abs(value) < 0.05) {
-      description = 'Minimal impact on prediction';
-    } else {
-      const direction = value > 0 ? 'positive' : 'negative';
-      const strength = Math.abs(value) > 0.2 ? 'strong' : 'moderate';
-      description = `${strength.charAt(0).toUpperCase() + strength.slice(1)} ${direction} impact: `;
-      
-      if (difference > 0) {
-        description += `${Math.abs(difference.toFixed(2))} above baseline`;
-      } else {
-        description += `${Math.abs(difference.toFixed(2))} below baseline`;
-      }
-    }
-
-    return description;
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -282,10 +186,10 @@ const PredictionFormPrinter = () => {
               <div>
                 <h1 className="text-3xl font-bold text-white flex items-center gap-3">
                   <Printer className="h-8 w-8" />
-                  Printer Purchase Predictor
+                    Printer Purchase Predictor
                 </h1>
                 <p className="text-indigo-100 mt-2 text-lg">
-                  Advanced machine learning model with parameter impact analysis
+                  Advanced machine learning model for predicting customer purchase behavior
                 </p>
               </div>
             </div>
@@ -312,7 +216,7 @@ const PredictionFormPrinter = () => {
               }`}
             >
               <History className="h-4 w-4" />
-              History & Impact Analysis
+              History
             </button>
             <button
               onClick={() => setActiveTab('analytics')}
@@ -326,7 +230,7 @@ const PredictionFormPrinter = () => {
               Analytics
             </button>
           </div>
-
+          
           <div className="p-8">
             {activeTab === 'form' && (
               <div className="space-y-8">
@@ -362,7 +266,7 @@ const PredictionFormPrinter = () => {
                               disabled={field.disabled}
                               value={formData[field.name]}
                               onChange={handleChange}
-                              className={`block w-full rounded-lg border border-gray-300 px-4 py-3 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm transition duration-200 ease-in-out hover:border-gray-400 disabled:bg-gray-50 disabled:text-gray-500`}
+                              className={`block w-full rounded-lg border border-gray-300 px-4 py-3 shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 sm:text-sm transition duration-200 ease-in-out hover:border-gray-400 disabled:bg-gray-50 disabled:text-gray-500 ${field.className || ''}`}
                             />
                             {field.name === 'return_rate' && (
                               <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -385,12 +289,25 @@ const PredictionFormPrinter = () => {
                       </div>
                     ))}
 
+                    {/* Region Dropdown */}
                     <div className="relative group">
                       <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg -m-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                       <div className="relative space-y-2">
                         <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                           <Users className="h-4 w-4 text-indigo-500" />
                           Region
+                          <div className="relative">
+                            <Info
+                              className="h-4 w-4 text-gray-400 cursor-help"
+                              onMouseEnter={() => setShowTooltip('region')}
+                              onMouseLeave={() => setShowTooltip(null)}
+                            />
+                            {showTooltip === 'region' && (
+                              <div className="absolute z-10 w-48 px-3 py-2 -mt-1 text-sm text-white bg-gray-900 rounded-lg shadow-lg">
+                                Select the geographical region of the customer
+                              </div>
+                            )}
+                          </div>
                         </label>
                         <select
                           name="region"
@@ -407,6 +324,7 @@ const PredictionFormPrinter = () => {
                       </div>
                     </div>
 
+                    {/* High Value Customer Toggle */}
                     <div className="relative group">
                       <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg -m-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
                       <div className="relative space-y-2">
@@ -458,7 +376,7 @@ const PredictionFormPrinter = () => {
                       <CheckCircle className="h-6 w-6 text-green-500" />
                       Prediction Results
                     </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-2 gap-6">
                       <div className="bg-white p-6 rounded-lg shadow-lg border border-indigo-50">
                         <div className="text-sm text-gray-500 mb-1">Prediction</div>
                         <div className="text-2xl font-bold text-indigo-600">
@@ -470,31 +388,6 @@ const PredictionFormPrinter = () => {
                         <div className="text-2xl font-bold text-indigo-600">
                           {(result.probability * 100).toFixed(1)}%
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-6">
-                      <h3 className="text-lg font-medium text-gray-900 mb-4">Parameter Impact Analysis</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {Object.entries(parameterImpact).map(([param, impact]) => (
-                          <div key={param} className="bg-white p-4 rounded-lg shadow border border-gray-100">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                {renderImpactIcon(impact.direction)}
-                                <span className="text-sm font-medium text-gray-700 capitalize">
-                                  {param.replace(/_/g, ' ')}
-                                </span>
-                              </div>
-                              <span className={`text-sm font-medium ${getImpactColor(impact.value)}`}>
-                                {impact.direction === 'positive' ? '+' : ''}
-                                {impact.value.toFixed(2)}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600">
-                              {getImpactDescription(impact)}
-                            </p>
-                          </div>
-                        ))}
                       </div>
                     </div>
                   </div>
@@ -514,54 +407,37 @@ const PredictionFormPrinter = () => {
                     <p className="text-gray-500">No predictions made yet.</p>
                   </div>
                 ) : (
-                  <div className="space-y-6">
+                  <div className="space-y-4">
                     {history.map((entry, index) => (
-                      <div key={index} className="bg-white p-6 rounded-lg shadow-lg border border-gray-100">
-                        <div className="flex justify-between items-start mb-6">
-                          <div className="space-y-1">
-                            <div className="text-sm text-gray-500">
-                              {new Date(entry.timestamp).toLocaleString()}
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              Region: {getRegionLabel(entry.region)} | 
-                              High Value: {entry.high_value_customer === '1' ? 'Yes' : 'No'}
-                            </div>
+                      <div key={index} className="bg-white p-6 rounded-lg shadow-md border border-gray-100 hover:shadow-lg transition-shadow duration-200">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="text-sm text-gray-500">
+                            {new Date(entry.timestamp).toLocaleString()}
                           </div>
-                          <div className={`px-4 py-2 rounded-full text-sm font-medium ${
+                          <div className={`px-4 py-1 rounded-full text-sm font-medium ${
                             entry.result.prediction === 1 
                               ? 'bg-green-100 text-green-800' 
                               : 'bg-red-100 text-red-800'
                           }`}>
-                            {entry.result.prediction === 1 ? 'Likely' : 'Unlikely'} ({(entry.result.probability * 100).toFixed(1)}%)
+                            {entry.result.prediction === 1 ? 'Likely' : 'Unlikely'}
                           </div>
                         </div>
-
-                        <div className="space-y-4">
-                          <h4 className="text-sm font-medium text-gray-700">Parameter Impact Analysis</h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {Object.entries(entry.impacts).map(([param, impact]) => (
-                              <div key={param} className="bg-gray-50 p-4 rounded-lg">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-2">
-                                    {renderImpactIcon(impact.direction)}
-                                    <span className="text-sm font-medium text-gray-700 capitalize">
-                                      {param.replace(/_/g, ' ')}
-                                    </span>
-                                  </div>
-                                  <span className={`text-sm font-medium ${getImpactColor(impact.value)}`}>
-                                    {impact.direction === 'positive' ? '+' : ''}
-                                    {impact.value.toFixed(2)}
-                                  </span>
-                                </div>
-                                <div className="text-sm text-gray-600">
-                                  Value: {entry[param]}
-                                  {param === 'return_rate' ? '%' : ''}
-                                </div>
-                                <div className="text-sm text-gray-600">
-                                  {getImpactDescription(impact)}
-                                </div>
-                              </div>
-                            ))}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <span className="block text-gray-500">Orders</span>
+                            <span className="font-medium">{entry.total_orders}</span>
+                          </div>
+                          <div>
+                            <span className="block text-gray-500">Total Spent</span>
+                            <span className="font-medium">${entry.total_spent}</span>
+                          </div>
+                          <div>
+                            <span className="block text-gray-500">Confidence</span>
+                            <span className="font-medium">{(entry.result.probability * 100).toFixed(1)}%</span>
+                          </div>
+                          <div>
+                            <span className="block text-gray-500">Region</span>
+                            <span className="font-medium">{getRegionLabel(entry.region)}</span>
                           </div>
                         </div>
                       </div>
@@ -649,4 +525,4 @@ const PredictionFormPrinter = () => {
   );
 };
 
-export default PredictionFormPrinter;
+export default PredictionForm;
